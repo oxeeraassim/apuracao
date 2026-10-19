@@ -1,14 +1,25 @@
 """
-Gera a imagem de divulgação para os stories do Instagram (1080 × 1920).
+Gera os dois slides de divulgação para os stories do Instagram (1080 × 1920).
 
-A peça é escura e usa o mesmo mapa enchendo de baixo para cima que está no
-ícone do aplicativo: quem vir o story e depois instalar reconhece a mesma
-coisa. Verde continua significando andamento da apuração, nunca candidato —
-um story eleitoral em azul ou vermelho vira propaganda, e a página não é.
+IDENTIDADE VISUAL — tirada do próprio perfil @oxe_eraassim
+A marca é papel velho: fundo creme, serifa escura e pesada, vermelho de
+tinta e o sol dourado do logo. Todas as capas dos reels são assim.
 
-O texto promete o que a página entrega e nada além: projeção é estimativa,
-não resultado. Exagerar aqui é o jeito mais rápido de queimar a credibilidade
-da página justamente na noite em que ela precisa ter alguma.
+POR QUE DOIS SLIDES
+Num story a pessoa decide em uns cinco segundos se fica ou passa. Tudo numa
+tela só vira parede de texto e ninguém lê a parte que mais importa, que é a
+do erro. Então o primeiro slide diz o que é e avisa que não é oficial; o
+segundo mostra o tamanho do erro e o que a página tem.
+
+HONESTIDADE DA PEÇA
+Divulgar "dá para saber quem ganhou com 5% apurado" venderia uma certeza que
+o modelo não tem: com 5% apurado o erro médio nos backtests foi de 0,96
+ponto percentual e chegou a 1,83 em 2014. Numa disputa decidida por menos
+que isso, a projeção pode apontar o candidato errado. Quem vê o story
+precisa saber disso antes de abrir a página, não depois.
+
+Os números saem de programa/backtest.py --ano 2006 2010 2014 2018 2022 e
+devem ser recalculados se o modelo mudar.
 
 Uso:  python3 gerar_stories.py
 """
@@ -25,109 +36,215 @@ RAIZ = os.path.dirname(AQUI)
 
 L, A = 1080, 1920
 
-FUNDO_1 = "#16203A"
-FUNDO_2 = "#070A12"
-VERDE = "#34D399"
-VERDE_2 = "#10B981"
-CINZA_MAPA = "#2E3A52"
-BRANCO = "#FFFFFF"
-SUAVE = "#9FB0CC"
-LINHA_AGUA = "#A7F3D0"
+PAPEL = "#f0e8d8"
+PAPEL_2 = "#e4dac4"
+TINTA = "#1c1b19"
+TINTA_FRACA = "#6b6456"
+VERMELHO = "#c8433a"
+DOURADO = "#e09a62"
+VERDE = "#3d7a4f"
+VERDE_CLARO = "#7cc492"
 
-ENDERECO = "baljp.github.io/apuracao"
+SERIF = "Lora, Georgia, serif"
+
+ENDERECO = "oxeeraassim.github.io/apuracao"
 PERFIL = "@oxe_eraassim"
 
-NIVEL = 0.58   # quanto do mapa aparece "apurado"
+NIVEL = 0.58
+
+ERROS = [("5%", "0,96", "1,83"),
+         ("20%", "0,73", "1,57"),
+         ("50%", "0,30", "0,79"),
+         ("75%", "0,14", "0,43")]
 
 
-def texto(x, y, t, tam, peso="600", cor=BRANCO, anc="middle", esp="0", op="1"):
+def txt(x, y, t, tam, peso="400", cor=TINTA, anc="middle", esp="0", op="1"):
     return (f'<text x="{x}" y="{y}" text-anchor="{anc}" fill="{cor}" '
-            f'font-family="Helvetica Neue,Helvetica,Arial" font-size="{tam}" '
-            f'font-weight="{peso}" letter-spacing="{esp}" opacity="{op}">{t}</text>')
+            f'font-family="{SERIF}" font-size="{tam}" font-weight="{peso}" '
+            f'letter-spacing="{esp}" opacity="{op}">{t}</text>')
 
 
-def montar() -> str:
+def sol(cx, cy, r):
+    p = [f'<circle cx="{cx}" cy="{cy}" r="{r * 0.46:.1f}" fill="{DOURADO}"/>']
+    for i, rr in enumerate([r * 0.66, r * 0.84, r]):
+        p.append(f'<path d="M {cx - rr:.1f} {cy} A {rr:.1f} {rr:.1f} 0 0 1 '
+                 f'{cx + rr:.1f} {cy}" fill="none" stroke="{DOURADO}" '
+                 f'stroke-width="{7 - i}" opacity="{0.9 - i * 0.18:.2f}"/>')
+    return "".join(p)
+
+
+def cabecalho():
+    return ("".join([
+        txt(88, 122, "OXE,", 32, "700", TINTA, "start"),
+        txt(172, 122, "era assim?", 26, "400", TINTA_FRACA, "start"),
+        sol(L - 120, 112, 42),
+        f'<rect x="88" y="152" width="{L - 176}" height="3" fill="{TINTA}" '
+        f'opacity="0.18"/>']))
+
+
+def rodape(escuro=True):
+    cor = TINTA if escuro else VERMELHO
+    return "".join([
+        f'<rect x="0" y="1786" width="{L}" height="134" fill="{cor}"/>',
+        txt(L / 2, 1843, ENDERECO, 35, "700", PAPEL),
+        txt(L / 2, 1890, PERFIL, 25, "400", PAPEL, esp="2", op="0.8")])
+
+
+def mapa_svg(dy, alvo):
     with open(os.path.join(RAIZ, "mapa.json"), encoding="utf-8") as fh:
         mapa = json.load(fh)
     _, _, lm, am = (float(v) for v in mapa["viewBox"].split())
-
-    # O mapa ocupa a faixa central da peça.
-    alvo = 560.0
     esc = alvo / max(lm, am)
     dx = (L - lm * esc) / 2
-    dy = 560
     formas = "".join(f'<path d="{d}"/>' for d in mapa["ufs"].values())
     corte = dy + am * esc * (1 - NIVEL)
+    return ("".join([
+        '<defs>',
+        f'<linearGradient id="nivel" x1="0" y1="{dy}" x2="0" y2="{dy + am * esc}"'
+        f' gradientUnits="userSpaceOnUse">'
+        f'<stop offset="0" stop-color="{PAPEL_2}"/>'
+        f'<stop offset="{1 - NIVEL}" stop-color="{PAPEL_2}"/>'
+        f'<stop offset="{1 - NIVEL}" stop-color="{VERDE_CLARO}"/>'
+        f'<stop offset="1" stop-color="{VERDE}"/></linearGradient>',
+        '<clipPath id="br" clipPathUnits="userSpaceOnUse">'
+        f'<g transform="translate({dx:.1f},{dy:.1f}) scale({esc:.5f})">{formas}</g>'
+        '</clipPath></defs>',
+        '<g clip-path="url(#br)">',
+        f'<rect x="0" y="{dy}" width="{L}" height="{am * esc}" fill="url(#nivel)"/>',
+        f'<rect x="0" y="{corte - 3}" width="{L}" height="6" fill="{PAPEL}" '
+        f'opacity="0.85"/>',
+        f'<rect x="0" y="{dy}" width="{L}" height="{am * esc}" fill="none" '
+        f'stroke="{TINTA}" stroke-width="6" opacity="0.25"/>',
+        '</g>']))
 
+
+def slide_1() -> str:
+    """O problema que a página resolve. Este é o slide que para o dedo."""
     p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{L}" height="{A}" '
          f'viewBox="0 0 {L} {A}">',
-         '<defs>',
-         f'<linearGradient id="ceu" x1="0" y1="0" x2="0.4" y2="1">'
-         f'<stop offset="0" stop-color="{FUNDO_1}"/>'
-         f'<stop offset="1" stop-color="{FUNDO_2}"/></linearGradient>',
-         f'<linearGradient id="nivel" x1="0" y1="{dy}" x2="0" y2="{dy + am * esc}"'
-         f' gradientUnits="userSpaceOnUse">'
-         f'<stop offset="0" stop-color="{CINZA_MAPA}"/>'
-         f'<stop offset="{1 - NIVEL}" stop-color="{CINZA_MAPA}"/>'
-         f'<stop offset="{1 - NIVEL}" stop-color="{VERDE}"/>'
-         f'<stop offset="1" stop-color="{VERDE_2}"/></linearGradient>',
-         '<clipPath id="br" clipPathUnits="userSpaceOnUse">'
-         f'<g transform="translate({dx:.1f},{dy:.1f}) scale({esc:.5f})">{formas}</g>'
-         '</clipPath>',
-         '</defs>',
-         f'<rect width="{L}" height="{A}" fill="url(#ceu)"/>']
+         f'<rect width="{L}" height="{A}" fill="{PAPEL}"/>',
+         cabecalho()]
 
-    # ---- topo ----
-    p.append(texto(L / 2, 180, "DOMINGO, 25 DE OUTUBRO", 34, "700", VERDE, esp="4"))
-    p.append(texto(L / 2, 290, "O resultado", 88, "700"))
-    p.append(texto(L / 2, 390, "antes do fim", 88, "700"))
-    p.append(texto(L / 2, 490, "da apuração", 88, "700"))
+    # O gancho é o problema, não a promessa. "Vamos antecipar o resultado"
+    # soa como quem vai dar o vencedor antes da hora — e é assim que um
+    # print da tela vira munição de campanha. "O número engana" desperta a
+    # mesma curiosidade e descreve o que a página realmente faz.
+    p.append(txt(L / 2, 290, "No começo da apuração,", 62, "700"))
+    p.append(txt(L / 2, 364, "o número engana", 62, "700"))
+    p.append(f'<rect x="{L / 2 - 80}" y="406" width="160" height="4" '
+             f'fill="{VERMELHO}"/>')
 
-    # ---- mapa ----
-    p.append('<g clip-path="url(#br)">')
-    p.append(f'<rect x="0" y="{dy}" width="{L}" height="{am * esc}" fill="url(#nivel)"/>')
-    p.append(f'<rect x="0" y="{corte - 4}" width="{L}" height="8" '
-             f'fill="{LINHA_AGUA}" opacity="0.9"/>')
-    p.append('</g>')
+    p.append(txt(L / 2, 474, "As urnas não terminam de contar todas na mesma", 29,
+                 "400", TINTA))
+    p.append(txt(L / 2, 514, "hora. Nos primeiros minutos, o percentual oficial", 29,
+                 "400", TINTA))
+    p.append(txt(L / 2, 554, "mostra só os lugares que já fecharam a contagem", 29,
+                 "400", TINTA))
+    p.append(txt(L / 2, 594, "— e não o país inteiro.", 29, "700", TINTA))
 
-    # ---- as duas coisas que a página faz ----
-    y = 1240
-    p.append(f'<rect x="90" y="{y}" width="4" height="150" fill="{VERDE}" rx="2"/>')
-    p.append(texto(130, y + 36, "PROJEÇÃO AO VIVO", 30, "700", VERDE, "start", esp="2"))
-    p.append(texto(130, y + 86, "O Sul conta rápido, o Nordeste demora.", 33, "500",
-                   BRANCO, "start"))
-    p.append(texto(130, y + 130, "O modelo corrige isso e mostra onde vai dar.", 33,
-                   "500", BRANCO, "start"))
+    p.append(mapa_svg(656, 430))
 
-    y = 1430
-    p.append(f'<rect x="90" y="{y}" width="4" height="150" fill="{SUAVE}" rx="2"/>')
-    p.append(texto(130, y + 36, "PESQUISAS", 30, "700", SUAVE, "start", esp="2"))
-    p.append(texto(130, y + 86, "Vários institutos num lugar só, com média", 33, "500",
-                   BRANCO, "start"))
-    p.append(texto(130, y + 130, "que pesa mais as recentes e as maiores.", 33, "500",
-                   BRANCO, "start"))
+    p.append(txt(L / 2, 1212, "Um algoritmo preditivo calcula o que ainda falta", 29,
+                 "400", TINTA_FRACA))
+    p.append(txt(L / 2, 1252, "de cada lugar e estima onde a apuração vai", 29,
+                 "400", TINTA_FRACA))
+    p.append(txt(L / 2, 1292, "terminar, se ajustando a cada urna contada.", 29,
+                 "400", TINTA_FRACA))
 
-    # ---- rodapé ----
-    p.append(texto(L / 2, 1690, "É uma estimativa estatística, não o resultado oficial.",
-                   27, "500", SUAVE, op="0.8"))
-    p.append(f'<rect x="{L / 2 - 310}" y="1730" width="620" height="92" rx="46" '
-             f'fill="{VERDE}"/>')
-    p.append(texto(L / 2, 1790, ENDERECO, 40, "700", "#06281D"))
-    p.append(texto(L / 2, 1878, PERFIL, 30, "600", SUAVE, esp="1"))
+    y = 1360
+    p.append(f'<rect x="88" y="{y}" width="4" height="118" fill="{VERDE}"/>')
+    p.append(txt(126, y + 34, "A APURAÇÃO", 25, "700", VERDE, "start", esp="3"))
+    p.append(txt(126, y + 76, "Dados oficiais do TSE, lidos ao vivo,", 28, "400",
+                 TINTA, "start"))
+    p.append(txt(126, y + 112, "com a margem sempre ao lado do número.", 28, "400",
+                 TINTA, "start"))
 
+    y = 1520
+    p.append(f'<rect x="88" y="{y}" width="4" height="158" fill="{VERMELHO}"/>')
+    p.append(txt(126, y + 34, "AS PESQUISAS", 25, "700", VERMELHO, "start", esp="3"))
+    p.append(txt(126, y + 76, "Sempre as mais recentes, com a porcentagem", 28,
+                 "400", TINTA, "start"))
+    p.append(txt(126, y + 112, "ponderada por pesquisa — atualizada assim", 28,
+                 "400", TINTA, "start"))
+    p.append(txt(126, y + 148, "que uma nova é divulgada.", 28, "400", TINTA,
+                 "start"))
+
+    p.append(rodape())
+    p.append("</svg>")
+    return "".join(p)
+
+
+def slide_2() -> str:
+    """O tamanho do erro e a postura da página."""
+    p = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{L}" height="{A}" '
+         f'viewBox="0 0 {L} {A}">',
+         f'<rect width="{L}" height="{A}" fill="{PAPEL}"/>',
+         cabecalho()]
+
+    p.append(txt(L / 2, 272, "E pode errar.", 58, "700"))
+    p.append(txt(L / 2, 342, "Veja o quanto.", 58, "700"))
+    p.append(txt(L / 2, 396, "Erro nas últimas 5 eleições, em pontos percentuais",
+                 26, "400", TINTA_FRACA))
+
+    topo = 440
+    alt = 88
+    p.append(f'<rect x="72" y="{topo}" width="{L - 144}" height="{alt * 5 + 16}" '
+             f'rx="14" fill="{PAPEL_2}"/>')
+    p.append(txt(195, topo + 56, "APURADO", 25, "700", TINTA_FRACA, esp="2"))
+    p.append(txt(610, topo + 56, "EM MÉDIA", 25, "700", TINTA_FRACA, esp="2"))
+    p.append(txt(890, topo + 56, "PIOR CASO", 25, "700", TINTA_FRACA, esp="2"))
+    for i, (marco, medio, pior) in enumerate(ERROS):
+        y = topo + alt * (i + 1) + 58
+        p.append(f'<rect x="100" y="{y - 60}" width="{L - 200}" height="2" '
+                 f'fill="{TINTA}" opacity="0.12"/>')
+        p.append(txt(195, y, marco, 42, "700", TINTA))
+        p.append(txt(610, y, "± " + medio, 42, "700", VERDE))
+        p.append(txt(890, y, "± " + pior, 42, "400", TINTA_FRACA))
+
+    y = topo + alt * 5 + 86
+    p.append(txt(L / 2, y, "Numa disputa decidida por menos que isso, a", 29,
+                 "400", TINTA))
+    p.append(txt(L / 2, y + 40, "projeção pode apontar o candidato errado", 29,
+                 "700", TINTA))
+    p.append(txt(L / 2, y + 80, "no começo da noite.", 29, "700", TINTA))
+
+    # ---- a postura, que é o que protege a página ----
+    y = 1130
+    p.append(f'<rect x="60" y="{y}" width="{L - 120}" height="268" rx="12" '
+             f'fill="none" stroke="{TINTA}" stroke-width="3" opacity="0.35"/>')
+    p.append(txt(L / 2, y + 62, "SEM LADO", 30, "700", TINTA, esp="5"))
+    p.append(txt(L / 2, y + 118, "A página não torce por ninguém e não", 29, "400",
+                 TINTA))
+    p.append(txt(L / 2, y + 158, "declara vencedor. Mostra sempre a margem", 29,
+                 "400", TINTA))
+    p.append(txt(L / 2, y + 198, "junto do número — e, enquanto a diferença", 29,
+                 "400", TINTA))
+    p.append(txt(L / 2, y + 238, "couber nela, diz que ainda não dá para saber.",
+                 29, "700", TINTA))
+
+    p.append(f'<rect x="60" y="1456" width="{L - 120}" height="230" rx="12" '
+             f'fill="{VERMELHO}"/>')
+    p.append(txt(L / 2, 1544, "ISTO NÃO É", 58, "700", PAPEL, esp="2"))
+    p.append(txt(L / 2, 1612, "RESULTADO OFICIAL", 58, "700", PAPEL, esp="2"))
+    p.append(txt(L / 2, 1656, "O resultado que vale é sempre o do TSE.", 27, "400",
+                 PAPEL, op="0.92"))
+
+    p.append(rodape(escuro=False))
     p.append("</svg>")
     return "".join(p)
 
 
 def main() -> None:
-    svg = montar()
-    png = os.path.join(RAIZ, "divulgacao", "stories-apuracao.png")
-    os.makedirs(os.path.dirname(png), exist_ok=True)
-    cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=png,
-                     output_width=L, output_height=A)
-    with open(png.replace(".png", ".svg"), "w", encoding="utf-8") as fh:
-        fh.write(svg)
-    print("  " + png)
+    saida = os.path.join(RAIZ, "divulgacao")
+    os.makedirs(saida, exist_ok=True)
+    for nome, svg in [("stories-1-o-que-e", slide_1()),
+                      ("stories-2-margem-de-erro", slide_2())]:
+        png = os.path.join(saida, nome + ".png")
+        cairosvg.svg2png(bytestring=svg.encode("utf-8"), write_to=png,
+                         output_width=L, output_height=A)
+        with open(os.path.join(saida, nome + ".svg"), "w", encoding="utf-8") as fh:
+            fh.write(svg)
+        print("  " + png)
 
 
 if __name__ == "__main__":
