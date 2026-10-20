@@ -1,0 +1,66 @@
+# Mantém o registro oficial de pesquisas do TSE sempre fresco.
+#
+# POR QUE AQUI, E NÃO NUMA TAREFA AGENDADA FORA
+# O TSE regera os dados abertos todo dia, então o arquivo precisa ser refeito
+# todo dia. Tentou-se fazer isso de fora, e não funcionou: três execuções
+# terminaram sem publicar nada e sem erro visível. Aqui o trabalho roda na
+# própria infraestrutura do GitHub, com permissão de escrita nativa — sem
+# proxy, sem credencial externa e sem CORS no caminho.
+#
+# O site do TSE que tem formulário de consulta recusa acesso de datacenter;
+# os dados abertos, não. É por isso que o coletor usa o pacote de dados
+# abertos e não a tela de consulta.
+
+name: Registro de pesquisas do TSE
+
+on:
+  schedule:
+    # 09h20 e 21h20 UTC, que é 06h20 e 18h20 de Brasília. O TSE costuma
+    # regerar os arquivos no fim da tarde, então a rodada da noite é a que
+    # pega as pesquisas registradas no dia.
+    - cron: "20 9,21 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: registro-tse
+  cancel-in-progress: false
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Baixar o registro e gerar o arquivo
+        run: python3 programa/coletar_registro_tse.py
+
+      - name: Conferir antes de publicar
+        run: |
+          # Arquivo pequeno demais significa dado incompleto, e publicar isso
+          # esvaziaria a coluna TSE do site sem avisar ninguém.
+          tamanho=$(wc -c < registro-tse.json)
+          echo "registro-tse.json: $tamanho bytes"
+          if [ "$tamanho" -lt 20000 ]; then
+            echo "pequeno demais — não publico"
+            exit 1
+          fi
+          python3 -c "import json,sys; d=json.load(open('registro-tse.json')); n=len({p['protocolo'] for p in d['pesquisas']}); print(n,'pesquisas de presidente'); sys.exit(0 if n>=150 else 1)"
+
+      - name: Publicar se mudou
+        run: |
+          if [ -z "$(git status --porcelain registro-tse.json)" ]; then
+            echo "nada mudou desde ontem"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add registro-tse.json
+          git commit -m "Atualiza o registro de pesquisas do TSE"
+          git push
